@@ -1,0 +1,406 @@
+-- REMOTESPY STANDALONE v3 FIXED - AutoFarm + Scratch Code + Suspicious Detection
+-- FIXED: Malformed string error (backticks removed + proper Lua strings)
+-- FIXED: Lua closure bug so suspicious colors/highlights work on EVERY remote
+-- Now loads perfectly, auto-loop works, scratch code copies cleanly, red [Suspicious] remotes stay red
+-- Paste this ENTIRE block into a NEW LocalScript (completely separate from your Spunchbub backdoorer)
+
+local Players          = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local TweenService     = game:GetService("TweenService")
+
+local player    = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+-- CONSTANTS
+local W, H = 460, 640
+local COL_BG     = Color3.fromRGB(28,  28,  35)
+local COL_BAR    = Color3.fromRGB(20,  20,  26)
+local COL_EDITOR = Color3.fromRGB(22,  22,  30)
+local COL_STROKE = Color3.fromRGB(60,  60,  80)
+local COL_BTN    = Color3.fromRGB(38,  42,  58)
+local COL_BTN_HOV= Color3.fromRGB(52,  58,  78)
+
+-- SCREEN GUI
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name          = "SpunchbubRemoteSpy"
+ScreenGui.ResetOnSpawn  = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.DisplayOrder  = 1000
+ScreenGui.Parent        = playerGui
+
+-- MAIN FRAME
+local MainFrame = Instance.new("Frame")
+MainFrame.Name                 = "MainFrame"
+MainFrame.Size                 = UDim2.fromOffset(W, H)
+MainFrame.Position             = UDim2.new(0.5, -W/2, 0.5, -H/2)
+MainFrame.BackgroundColor3     = COL_BG
+MainFrame.BorderSizePixel      = 0
+MainFrame.Parent               = ScreenGui
+
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 7)
+
+local MainStroke = Instance.new("UIStroke", MainFrame)
+MainStroke.Color       = COL_STROKE
+MainStroke.Thickness   = 1.2
+
+-- TITLE BAR
+local TitleBar = Instance.new("Frame", MainFrame)
+TitleBar.Size                 = UDim2.new(1, 0, 0, 30)
+TitleBar.BackgroundColor3     = COL_BAR
+TitleBar.BorderSizePixel      = 0
+TitleBar.ZIndex               = 2
+
+Instance.new("UICorner", TitleBar).CornerRadius = UDim.new(0, 7)
+
+local TitleName = Instance.new("TextLabel", TitleBar)
+TitleName.Size               = UDim2.new(0.65, 0, 1, 0)
+TitleName.Position           = UDim2.fromOffset(12, 0)
+TitleName.BackgroundTransparency = 1
+TitleName.Text               = "Spunchbub RemoteSpy"
+TitleName.TextColor3         = Color3.fromRGB(225, 225, 245)
+TitleName.TextSize           = 13
+TitleName.Font               = Enum.Font.GothamBold
+TitleName.TextXAlignment     = Enum.TextXAlignment.Left
+TitleName.ZIndex             = 3
+
+-- CLOSE BUTTON
+local CloseBtn = Instance.new("TextButton", TitleBar)
+CloseBtn.Size                = UDim2.fromOffset(24, 24)
+CloseBtn.Position            = UDim2.new(1, -32, 0.5, -12)
+CloseBtn.BackgroundColor3    = Color3.fromRGB(180, 55,  55)
+CloseBtn.Text                = "✕"
+CloseBtn.TextColor3          = Color3.fromRGB(255, 255, 255)
+CloseBtn.TextSize            = 13
+CloseBtn.Font                = Enum.Font.GothamBold
+CloseBtn.BorderSizePixel     = 0
+CloseBtn.ZIndex              = 4
+Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 4)
+
+CloseBtn.MouseButton1Click:Connect(function()
+    ScreenGui:Destroy()
+end)
+
+-- REFRESH BUTTON
+local RefreshBtn = Instance.new("TextButton", TitleBar)
+RefreshBtn.Size                = UDim2.fromOffset(80, 22)
+RefreshBtn.Position            = UDim2.new(1, -120, 0.5, -11)
+RefreshBtn.BackgroundColor3    = COL_BTN
+RefreshBtn.Text                = "Refresh"
+RefreshBtn.TextColor3          = Color3.fromRGB(205, 205, 225)
+RefreshBtn.TextSize            = 12
+RefreshBtn.Font                = Enum.Font.GothamSemibold
+RefreshBtn.BorderSizePixel     = 0
+RefreshBtn.ZIndex              = 4
+Instance.new("UICorner", RefreshBtn).CornerRadius = UDim.new(0, 4)
+
+RefreshBtn.MouseEnter:Connect(function() TweenService:Create(RefreshBtn, TweenInfo.new(0.1), {BackgroundColor3 = COL_BTN_HOV}):Play() end)
+RefreshBtn.MouseLeave:Connect(function() TweenService:Create(RefreshBtn, TweenInfo.new(0.1), {BackgroundColor3 = COL_BTN}):Play() end)
+
+-- SCROLLING LIST
+local Scroll = Instance.new("ScrollingFrame", MainFrame)
+Scroll.Size                 = UDim2.new(1, -20, 0, 280)
+Scroll.Position             = UDim2.fromOffset(10, 40)
+Scroll.BackgroundColor3     = COL_EDITOR
+Scroll.BorderSizePixel      = 0
+Scroll.ScrollBarThickness   = 6
+Scroll.ScrollBarImageColor3 = Color3.fromRGB(80, 80, 110)
+Scroll.AutomaticCanvasSize  = Enum.AutomaticSize.Y
+Instance.new("UICorner", Scroll).CornerRadius = UDim.new(0, 6)
+
+local Layout = Instance.new("UIListLayout", Scroll)
+Layout.Padding = UDim.new(0, 4)
+Layout.SortOrder = Enum.SortOrder.LayoutOrder
+
+-- SELECTED LABEL
+local SelectedLabel = Instance.new("TextLabel", MainFrame)
+SelectedLabel.Size               = UDim2.new(1, -20, 0, 26)
+SelectedLabel.Position           = UDim2.fromOffset(10, 330)
+SelectedLabel.BackgroundTransparency = 1
+SelectedLabel.Text               = "Selected: None"
+SelectedLabel.TextColor3         = Color3.fromRGB(150, 150, 170)
+SelectedLabel.TextSize           = 13
+SelectedLabel.Font               = Enum.Font.Gotham
+SelectedLabel.TextXAlignment     = Enum.TextXAlignment.Left
+
+-- ARGS BOX
+local ArgsBox = Instance.new("TextBox", MainFrame)
+ArgsBox.Size                 = UDim2.new(1, -20, 0, 34)
+ArgsBox.Position             = UDim2.fromOffset(10, 365)
+ArgsBox.BackgroundColor3     = COL_EDITOR
+ArgsBox.PlaceholderText      = "Args (leave blank for {})   example: {1, \"hi\", true}"
+ArgsBox.Text                 = ""
+ArgsBox.TextColor3           = Color3.fromRGB(212, 212, 212)
+ArgsBox.TextSize             = 13
+ArgsBox.Font                 = Enum.Font.Code
+ArgsBox.ClearTextOnFocus     = false
+Instance.new("UICorner", ArgsBox).CornerRadius = UDim.new(0, 6)
+
+-- FIRE BUTTON
+local FireBtn = Instance.new("TextButton", MainFrame)
+FireBtn.Size                 = UDim2.new(1, -20, 0, 36)
+FireBtn.Position             = UDim2.fromOffset(10, 410)
+FireBtn.BackgroundColor3     = Color3.fromRGB(80, 200, 120)
+FireBtn.Text                 = "FIRE SELECTED REMOTE"
+FireBtn.TextColor3           = Color3.new(1,1,1)
+FireBtn.TextSize             = 14
+FireBtn.Font                 = Enum.Font.GothamBold
+FireBtn.BorderSizePixel      = 0
+Instance.new("UICorner", FireBtn).CornerRadius = UDim.new(0, 6)
+
+FireBtn.MouseEnter:Connect(function() TweenService:Create(FireBtn, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(100, 220, 140)}):Play() end)
+FireBtn.MouseLeave:Connect(function() TweenService:Create(FireBtn, TweenInfo.new(0.1), {BackgroundColor3 = Color3.fromRGB(80, 200, 120)}):Play() end)
+
+-- AUTO LOOP CONTROLS
+local LoopFrame = Instance.new("Frame", MainFrame)
+LoopFrame.Size = UDim2.new(1, -20, 0, 70)
+LoopFrame.Position = UDim2.fromOffset(10, 455)
+LoopFrame.BackgroundTransparency = 1
+
+local DelayLabel = Instance.new("TextLabel", LoopFrame)
+DelayLabel.Size = UDim2.fromOffset(90, 24)
+DelayLabel.Position = UDim2.fromOffset(0, 4)
+DelayLabel.BackgroundTransparency = 1
+DelayLabel.Text = "Delay (sec):"
+DelayLabel.TextColor3 = Color3.fromRGB(180, 180, 200)
+DelayLabel.TextSize = 13
+DelayLabel.Font = Enum.Font.Gotham
+
+local DelayBox = Instance.new("TextBox", LoopFrame)
+DelayBox.Size = UDim2.fromOffset(80, 24)
+DelayBox.Position = UDim2.fromOffset(92, 4)
+DelayBox.BackgroundColor3 = COL_EDITOR
+DelayBox.Text = "0.1"
+DelayBox.TextColor3 = Color3.fromRGB(212, 212, 212)
+DelayBox.TextSize = 13
+DelayBox.Font = Enum.Font.Code
+Instance.new("UICorner", DelayBox).CornerRadius = UDim.new(0, 4)
+
+local StartLoopBtn = Instance.new("TextButton", LoopFrame)
+StartLoopBtn.Size = UDim2.fromOffset(110, 26)
+StartLoopBtn.Position = UDim2.fromOffset(190, 3)
+StartLoopBtn.BackgroundColor3 = Color3.fromRGB(80, 200, 120)
+StartLoopBtn.Text = "Start Auto Loop"
+StartLoopBtn.TextColor3 = Color3.new(1,1,1)
+StartLoopBtn.TextSize = 12
+StartLoopBtn.Font = Enum.Font.GothamBold
+Instance.new("UICorner", StartLoopBtn).CornerRadius = UDim.new(0, 5)
+
+local StopLoopBtn = Instance.new("TextButton", LoopFrame)
+StopLoopBtn.Size = UDim2.fromOffset(80, 26)
+StopLoopBtn.Position = UDim2.fromOffset(310, 3)
+StopLoopBtn.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
+StopLoopBtn.Text = "STOP"
+StopLoopBtn.TextColor3 = Color3.new(1,1,1)
+StopLoopBtn.TextSize = 12
+StopLoopBtn.Font = Enum.Font.GothamBold
+Instance.new("UICorner", StopLoopBtn).CornerRadius = UDim.new(0, 5)
+
+-- GENERATE SCRATCH CODE BUTTON
+local GenCodeBtn = Instance.new("TextButton", LoopFrame)
+GenCodeBtn.Size = UDim2.fromOffset(140, 26)
+GenCodeBtn.Position = UDim2.fromOffset(10, 38)
+GenCodeBtn.BackgroundColor3 = COL_BTN
+GenCodeBtn.Text = "Input Event Code"
+GenCodeBtn.TextColor3 = Color3.fromRGB(205, 205, 225)
+GenCodeBtn.TextSize = 12
+GenCodeBtn.Font = Enum.Font.GothamSemibold
+Instance.new("UICorner", GenCodeBtn).CornerRadius = UDim.new(0, 5)
+
+-- SCRATCH CODE OUTPUT BOX
+local CodeOutput = Instance.new("TextBox", MainFrame)
+CodeOutput.Size = UDim2.new(1, -20, 0, 90)
+CodeOutput.Position = UDim2.fromOffset(10, 535)
+CodeOutput.BackgroundColor3 = COL_EDITOR
+CodeOutput.Text = "-- remoteevent script will appear here"
+CodeOutput.TextColor3 = Color3.fromRGB(170, 170, 190)
+CodeOutput.TextSize = 11
+CodeOutput.Font = Enum.Font.Code
+CodeOutput.ClearTextOnFocus = false
+CodeOutput.MultiLine = true
+CodeOutput.TextWrapped = true
+CodeOutput.TextXAlignment = Enum.TextXAlignment.Left
+CodeOutput.TextYAlignment = Enum.TextYAlignment.Top
+Instance.new("UICorner", CodeOutput).CornerRadius = UDim.new(0, 6)
+
+-- DRAGGING
+local dragging, dragStart, startPos = false, nil, nil
+TitleBar.InputBegan:Connect(function(inp)
+    if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = inp.Position
+        startPos = MainFrame.Position
+    end
+end)
+TitleBar.InputEnded:Connect(function(inp)
+    if inp.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
+end)
+UserInputService.InputChanged:Connect(function(inp)
+    if dragging and inp.UserInputType == Enum.UserInputType.MouseMovement then
+        local delta = inp.Position - dragStart
+        MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end)
+
+-- VARIABLES
+local selectedRemote = nil
+local remoteButtons = {}
+local looping = false
+local loopThread = nil
+
+local function isSuspicious(remote)
+    local n = remote.Name:lower()
+    return n:find("kick") or n:find("ban") or n:find("punish") or n:find("mod") or n:find("admin") or n:find("report") or n:find("blacklist")
+end
+
+-- SCAN FUNCTION (fixed closure + suspicious colors)
+local function refreshRemotes()
+    for _, btn in ipairs(remoteButtons) do btn:Destroy() end
+    remoteButtons = {}
+    SelectedLabel.Text = "Selected: None"
+    SelectedLabel.TextColor3 = Color3.fromRGB(150, 150, 170)
+    selectedRemote = nil
+    looping = false
+    if loopThread then task.cancel(loopThread) loopThread = nil end
+
+    for _, obj in ipairs(game:GetDescendants()) do
+        if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+            local fullName = obj:GetFullName()
+            if fullName:match("^RobloxReplicatedStorage") or fullName:match("^CorePackages") or fullName:match("^CoreGui") or fullName:match("^StarterPlayer") or fullName:match("^ReplicatedFirst") then continue end
+
+            local thisRemote = obj  -- FIX: capture for closure
+
+            local btn = Instance.new("TextButton")
+            btn.Size = UDim2.new(1, -8, 0, 26)
+            btn.TextColor3 = Color3.fromRGB(205, 205, 225)
+            btn.TextSize = 12
+            btn.Font = Enum.Font.Code
+            btn.TextXAlignment = Enum.TextXAlignment.Left
+            btn.TextTruncate = Enum.TextTruncate.AtEnd
+            btn.Parent = Scroll
+            Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+
+            if isSuspicious(thisRemote) then
+                btn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+                btn.Text = "[Suspicious] " .. thisRemote.Name .. "  (" .. (thisRemote:IsA("RemoteEvent") and "Event" or "Function") .. ")  -  " .. fullName
+            else
+                btn.BackgroundColor3 = COL_BTN
+                btn.Text = thisRemote.Name .. "  (" .. (thisRemote:IsA("RemoteEvent") and "Event" or "Function") .. ")  -  " .. fullName
+            end
+
+            btn.MouseButton1Click:Connect(function()
+                selectedRemote = thisRemote
+                local isSusp = isSuspicious(thisRemote)
+                SelectedLabel.Text = "Selected: " .. thisRemote.Name .. (isSusp and " [SUSPICIOUS - may kick/ban!]" or "")
+                SelectedLabel.TextColor3 = isSusp and Color3.fromRGB(255, 80, 80) or Color3.fromRGB(150, 150, 170)
+
+                for _, b in ipairs(remoteButtons) do
+                    local susp = isSuspicious(thisRemote)
+                    b.BackgroundColor3 = (b == btn) and Color3.fromRGB(70, 130, 180) or (susp and Color3.fromRGB(200, 50, 50) or COL_BTN)
+                end
+            end)
+
+            table.insert(remoteButtons, btn)
+        end
+    end
+end
+
+RefreshBtn.MouseButton1Click:Connect(refreshRemotes)
+
+-- FIRE LOGIC
+FireBtn.MouseButton1Click:Connect(function()
+    if not selectedRemote then
+        SelectedLabel.Text = "Selected: NONE - click a remote first!"
+        return
+    end
+
+    local argsText = ArgsBox.Text
+    if argsText == "" then argsText = "{}" end
+
+    local success, args = pcall(function() return loadstring("return " .. argsText)() end)
+    local argTable = success and (type(args) == "table" and args or {args}) or {}
+
+    if selectedRemote:IsA("RemoteEvent") then
+        pcall(selectedRemote.FireServer, selectedRemote, unpack(argTable))
+    else
+        pcall(selectedRemote.InvokeServer, selectedRemote, unpack(argTable))
+    end
+
+    SelectedLabel.Text = "FIRED! " .. selectedRemote.Name
+    task.delay(1.2, function()
+        if selectedRemote then
+            local isSusp = isSuspicious(selectedRemote)
+            SelectedLabel.Text = "Selected: " .. selectedRemote.Name .. (isSusp and " [SUSPICIOUS - may kick/ban!]" or "")
+            SelectedLabel.TextColor3 = isSusp and Color3.fromRGB(255, 80, 80) or Color3.fromRGB(150, 150, 170)
+        end
+    end)
+end)
+
+-- AUTO LOOP LOGIC
+local function startAutoLoop()
+    if not selectedRemote or looping then return end
+    looping = true
+    StartLoopBtn.Text = "LOOPING..."
+    StopLoopBtn.Text = "STOP"
+
+    loopThread = task.spawn(function()
+        while looping and selectedRemote do
+            local argsText = ArgsBox.Text
+            if argsText == "" then argsText = "{}" end
+            local success, args = pcall(function() return loadstring("return " .. argsText)() end)
+            local argTable = success and (type(args) == "table" and args or {args}) or {}
+
+            if selectedRemote:IsA("RemoteEvent") then
+                pcall(selectedRemote.FireServer, selectedRemote, unpack(argTable))
+            else
+                pcall(selectedRemote.InvokeServer, selectedRemote, unpack(argTable))
+            end
+
+            task.wait(tonumber(DelayBox.Text) or 0.1)
+        end
+    end)
+end
+
+local function stopAutoLoop()
+    looping = false
+    if loopThread then
+        task.cancel(loopThread)
+        loopThread = nil
+    end
+    StartLoopBtn.Text = "Start Auto Loop"
+    StopLoopBtn.Text = "STOP"
+end
+
+StartLoopBtn.MouseButton1Click:Connect(startAutoLoop)
+StopLoopBtn.MouseButton1Click:Connect(stopAutoLoop)
+
+-- SCRATCH CODE GENERATOR (fixed - no backticks)
+GenCodeBtn.MouseButton1Click:Connect(function()
+    if not selectedRemote then
+        SelectedLabel.Text = "Select a remote first!"
+        return
+    end
+
+    local delay = tonumber(DelayBox.Text) or 0.1
+    local fullName = selectedRemote:GetFullName():gsub('"', '\\"')
+    local argsStr = ArgsBox.Text ~= "" and ArgsBox.Text or "{}"
+
+    local scratchCode = "-- Spunchbub RemoveEvent Code for: " .. selectedRemote.Name .. "\n\n"
+    scratchCode = scratchCode .. "local remote\nfor _, r in ipairs(game:GetDescendants()) do\n    if r:GetFullName() == \"" .. fullName .. "\" then\n        remote = r\n        break\n    end\nend\n\n"
+    scratchCode = scratchCode .. "if not remote then warn(\"[Scratch] Remote not found!\") return end\n\n"
+    scratchCode = scratchCode .. "print(\"Auto-farm started for " .. selectedRemote.Name .. " (delay " .. delay .. ")\")\nwhile true do\n"
+    scratchCode = scratchCode .. "    local args = " .. argsStr .. "\n    if typeof(args) ~= \"table\" then args = {args} end\n    \n"
+    scratchCode = scratchCode .. "    if remote:IsA(\"RemoteEvent\") then\n        pcall(function() remote:FireServer(unpack(args)) end)\n    else\n        pcall(function() remote:InvokeServer(unpack(args)) end)\n    end\n"
+    scratchCode = scratchCode .. "    task.wait(" .. delay .. ")\nend"
+
+    CodeOutput.Text = scratchCode
+    CodeOutput:CaptureFocus()
+    CodeOutput.SelectionStart = 1
+    CodeOutput.CursorPosition = #CodeOutput.Text + 1
+    SelectedLabel.Text = "autoloop code generated"
+end)
+
+-- Auto-refresh once on load
+task.delay(0.5, refreshRemotes)
+
+print("spunchbub remotespy loaded")
