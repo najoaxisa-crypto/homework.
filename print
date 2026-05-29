@@ -1,0 +1,735 @@
+local Players = game:GetService("Players")
+local UserService = game:GetService("UserService")
+local StarterGui = game:GetService("StarterGui")
+local UserInputService = game:GetService("UserInputService")
+local Stats = game:GetService("Stats")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+
+local localPlayer = Players.LocalPlayer
+local selectedPlayer = nil
+local recordMode = false
+local recordLog = {}
+local recordingConnections = {}
+local uiGui = nil
+local recordingSession = 0
+
+local function safeCall(func)
+	local success, result = pcall(func)
+	if success then
+		return result
+	end
+	return "Unavailable"
+end
+
+local function divider(text)
+	print("")
+	print("============================================================")
+	print(text)
+	print("============================================================")
+end
+
+local function printLine(name, value)
+	print(name .. ": " .. tostring(value))
+end
+
+local function boolText(value)
+	if value == true then
+		return "Yes"
+	elseif value == false then
+		return "No"
+	end
+	return tostring(value)
+end
+
+local function getTime()
+	return os.date("%Y-%m-%d %H:%M:%S")
+end
+
+local function addRecord(eventName, information)
+	if not recordMode then
+		return
+	end
+
+	local entry = "[" .. getTime() .. "] " .. eventName .. " | " .. information
+	table.insert(recordLog, entry)
+	print("[RECORD MODE] " .. entry)
+end
+
+local function disconnectRecording()
+	for _, connection in ipairs(recordingConnections) do
+		if connection and connection.Disconnect then
+			connection:Disconnect()
+		end
+	end
+
+	recordingConnections = {}
+	recordingSession += 1
+end
+
+local function countClass(container, className)
+	if not container then
+		return 0
+	end
+
+	local amount = 0
+
+	for _, item in ipairs(container:GetDescendants()) do
+		if item:IsA(className) then
+			amount += 1
+		end
+	end
+
+	return amount
+end
+
+local function getAccessories(character)
+	if not character then
+		return "None"
+	end
+
+	local list = {}
+
+	for _, item in ipairs(character:GetChildren()) do
+		if item:IsA("Accessory") then
+			table.insert(list, item.Name)
+		end
+	end
+
+	if #list == 0 then
+		return "None"
+	end
+
+	return table.concat(list, ", ")
+end
+
+local function getTools(character)
+	if not character then
+		return "None"
+	end
+
+	local list = {}
+
+	for _, item in ipairs(character:GetChildren()) do
+		if item:IsA("Tool") then
+			table.insert(list, item.Name)
+		end
+	end
+
+	if #list == 0 then
+		return "None"
+	end
+
+	return table.concat(list, ", ")
+end
+
+local function printAttributes(instance)
+	local attributes = instance:GetAttributes()
+	local found = false
+
+	for name, value in pairs(attributes) do
+		found = true
+		printLine("Attribute - " .. name, value)
+	end
+
+	if not found then
+		printLine("Attributes", "None")
+	end
+end
+
+local function printLeaderstats(player)
+	local leaderstats = player:FindFirstChild("leaderstats")
+
+	if not leaderstats then
+		printLine("Leaderstats", "None")
+		return
+	end
+
+	for _, stat in ipairs(leaderstats:GetChildren()) do
+		if stat:IsA("ValueBase") then
+			printLine("Leaderstat - " .. stat.Name, stat.Value)
+		else
+			printLine("Leaderstat - " .. stat.Name, stat.ClassName)
+		end
+	end
+end
+
+local function getVerifiedInfo(userId)
+	local result = safeCall(function()
+		local infos = UserService:GetUserInfosByUserIdsAsync({userId})
+		if infos and infos[1] then
+			return infos[1]
+		end
+		return nil
+	end)
+
+	if typeof(result) == "table" then
+		return result
+	end
+
+	return nil
+end
+
+local function getLocalPing()
+	return safeCall(function()
+		return math.floor(localPlayer:GetNetworkPing() * 1000) .. " ms"
+	end)
+end
+
+local function getMemory()
+	return safeCall(function()
+		return math.floor(Stats:GetTotalMemoryUsageMb()) .. " MB"
+	end)
+end
+
+local function printHumanoidDescription(player)
+	divider("AVATAR / HUMANOID DESCRIPTION")
+
+	local description = safeCall(function()
+		return Players:GetHumanoidDescriptionFromUserId(player.UserId)
+	end)
+
+	if typeof(description) ~= "Instance" then
+		printLine("Humanoid Description", "Unavailable")
+		return
+	end
+
+	printLine("Shirt", description.Shirt)
+	printLine("Pants", description.Pants)
+	printLine("Graphic TShirt", description.GraphicTShirt)
+	printLine("Face", description.Face)
+	printLine("Head", description.Head)
+	printLine("Torso", description.Torso)
+	printLine("Left Arm", description.LeftArm)
+	printLine("Right Arm", description.RightArm)
+	printLine("Left Leg", description.LeftLeg)
+	printLine("Right Leg", description.RightLeg)
+	printLine("Hat Accessories", description.HatAccessory ~= "" and description.HatAccessory or "None")
+	printLine("Hair Accessories", description.HairAccessory ~= "" and description.HairAccessory or "None")
+	printLine("Face Accessories", description.FaceAccessory ~= "" and description.FaceAccessory or "None")
+	printLine("Neck Accessories", description.NeckAccessory ~= "" and description.NeckAccessory or "None")
+	printLine("Shoulder Accessories", description.ShouldersAccessory ~= "" and description.ShouldersAccessory or "None")
+	printLine("Front Accessories", description.FrontAccessory ~= "" and description.FrontAccessory or "None")
+	printLine("Back Accessories", description.BackAccessory ~= "" and description.BackAccessory or "None")
+	printLine("Waist Accessories", description.WaistAccessory ~= "" and description.WaistAccessory or "None")
+	printLine("Climb Animation", description.ClimbAnimation)
+	printLine("Fall Animation", description.FallAnimation)
+	printLine("Idle Animation", description.IdleAnimation)
+	printLine("Jump Animation", description.JumpAnimation)
+	printLine("Run Animation", description.RunAnimation)
+	printLine("Swim Animation", description.SwimAnimation)
+	printLine("Walk Animation", description.WalkAnimation)
+	printLine("Body Type Scale", description.BodyTypeScale)
+	printLine("Depth Scale", description.DepthScale)
+	printLine("Head Scale", description.HeadScale)
+	printLine("Height Scale", description.HeightScale)
+	printLine("Proportion Scale", description.ProportionScale)
+	printLine("Width Scale", description.WidthScale)
+end
+
+local function printCharacterInformation(player)
+	divider("CHARACTER INFORMATION")
+
+	local character = player.Character
+
+	if not character then
+		printLine("Character", "Not loaded")
+		return
+	end
+
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	local root = character:FindFirstChild("HumanoidRootPart")
+
+	printLine("Character Name", character.Name)
+	printLine("Character Parent", character.Parent and character.Parent.Name or "None")
+	printLine("Total Descendants", #character:GetDescendants())
+	printLine("BaseParts", countClass(character, "BasePart"))
+	printLine("MeshParts", countClass(character, "MeshPart"))
+	printLine("Accessories", getAccessories(character))
+	printLine("Equipped Tools", getTools(character))
+
+	if humanoid then
+		printLine("Humanoid Found", "Yes")
+		printLine("Health", math.floor(humanoid.Health) .. " / " .. math.floor(humanoid.MaxHealth))
+		printLine("WalkSpeed", humanoid.WalkSpeed)
+		printLine("JumpPower", humanoid.JumpPower)
+		printLine("JumpHeight", humanoid.JumpHeight)
+		printLine("UseJumpPower", boolText(humanoid.UseJumpPower))
+		printLine("Rig Type", humanoid.RigType.Name)
+		printLine("Current State", humanoid:GetState().Name)
+		printLine("Sit", boolText(humanoid.Sit))
+		printLine("PlatformStand", boolText(humanoid.PlatformStand))
+		printLine("AutoRotate", boolText(humanoid.AutoRotate))
+		printLine("Requires Neck", boolText(humanoid.RequiresNeck))
+		printLine("BreakJointsOnDeath", boolText(humanoid.BreakJointsOnDeath))
+		printLine("Display Distance Type", humanoid.DisplayDistanceType.Name)
+		printLine("Health Display Type", humanoid.HealthDisplayType.Name)
+		printLine("Name Display Distance", humanoid.NameDisplayDistance)
+		printLine("Health Display Distance", humanoid.HealthDisplayDistance)
+	else
+		printLine("Humanoid", "Not found")
+	end
+
+	if root then
+		printLine("Root Position", tostring(root.Position))
+		printLine("Root Velocity", tostring(root.AssemblyLinearVelocity))
+		printLine("Root Anchored", boolText(root.Anchored))
+	else
+		printLine("HumanoidRootPart", "Not found")
+	end
+
+	printAttributes(character)
+end
+
+local function printPlayerInformation(player)
+	selectedPlayer = player
+
+	divider("SELECTED PLAYER INFORMATION")
+
+	printLine("Printed At", getTime())
+	printLine("Username", player.Name)
+	printLine("Display Name", player.DisplayName)
+	printLine("User ID", player.UserId)
+	printLine("Account Age", player.AccountAge .. " days")
+	printLine("Membership Type", player.MembershipType.Name)
+	printLine("Is Local Player", boolText(player == localPlayer))
+	printLine("Is Friend With You", safeCall(function()
+		return boolText(localPlayer:IsFriendsWith(player.UserId))
+	end))
+	printLine("Team", player.Team and player.Team.Name or "None")
+	printLine("Team Color", player.TeamColor.Name)
+	printLine("Neutral", boolText(player.Neutral))
+	printLine("Parent", player.Parent and player.Parent.Name or "None")
+	printLine("Player Child Count", #player:GetChildren())
+	printLine("Record Mode Currently", boolText(recordMode))
+	printLine("Your Ping", getLocalPing())
+	printLine("Client Memory", getMemory())
+	printLine("Server Job ID", game.JobId)
+	printLine("Place ID", game.PlaceId)
+	printLine("Game ID / Universe ID", game.GameId)
+	printLine("Place Version", game.PlaceVersion)
+	printLine("Current Player Count", #Players:GetPlayers())
+	printLine("Max Players", Players.MaxPlayers)
+
+	local userInfo = getVerifiedInfo(player.UserId)
+
+	if userInfo then
+		printLine("Verified Badge", boolText(userInfo.HasVerifiedBadge))
+		printLine("UserService Username", userInfo.Username)
+		printLine("UserService Display Name", userInfo.DisplayName)
+	else
+		printLine("Verified Badge", "Unavailable")
+	end
+
+	divider("PLAYER ATTRIBUTES")
+	printAttributes(player)
+
+	divider("LEADERSTATS")
+	printLeaderstats(player)
+
+	printCharacterInformation(player)
+	printHumanoidDescription(player)
+
+	divider("END OF PLAYER INFORMATION")
+	print("Press RightShift to print the record log.")
+	print("Press R to print this selected player's information again.")
+	print("")
+end
+
+local function printRecordLog()
+	divider("RECORDED LOG FOR SELECTED PLAYER")
+
+	if not selectedPlayer then
+		print("No selected player.")
+		return
+	end
+
+	printLine("Selected Player", selectedPlayer.Name .. " [" .. selectedPlayer.UserId .. "]")
+	printLine("Record Mode", boolText(recordMode))
+	printLine("Entries", #recordLog)
+
+	if #recordLog == 0 then
+		print("No events recorded yet.")
+		return
+	end
+
+	for number, entry in ipairs(recordLog) do
+		print(number .. ". " .. entry)
+	end
+end
+
+local function setupCharacterRecording(player, character, session)
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+
+	if not humanoid then
+		humanoid = safeCall(function()
+			return character:WaitForChild("Humanoid", 10)
+		end)
+	end
+
+	if typeof(humanoid) == "Instance" and humanoid:IsA("Humanoid") then
+		local lastHealth = humanoid.Health
+
+		table.insert(recordingConnections, humanoid.Died:Connect(function()
+			addRecord("DIED", player.Name .. " died")
+		end))
+
+		table.insert(recordingConnections, humanoid.HealthChanged:Connect(function(newHealth)
+			if math.abs(newHealth - lastHealth) >= 5 or newHealth <= 0 then
+				addRecord("HEALTH CHANGE", player.Name .. " health changed from " .. math.floor(lastHealth) .. " to " .. math.floor(newHealth))
+				lastHealth = newHealth
+			end
+		end))
+
+		table.insert(recordingConnections, humanoid.StateChanged:Connect(function(oldState, newState)
+			addRecord("STATE CHANGE", player.Name .. " changed from " .. oldState.Name .. " to " .. newState.Name)
+		end))
+
+		table.insert(recordingConnections, humanoid:GetPropertyChangedSignal("Sit"):Connect(function()
+			addRecord("SIT CHANGE", player.Name .. " Sit = " .. boolText(humanoid.Sit))
+		end))
+
+		table.insert(recordingConnections, humanoid:GetPropertyChangedSignal("PlatformStand"):Connect(function()
+			addRecord("PLATFORM STAND CHANGE", player.Name .. " PlatformStand = " .. boolText(humanoid.PlatformStand))
+		end))
+	end
+
+	table.insert(recordingConnections, character.ChildAdded:Connect(function(child)
+		if child:IsA("Tool") then
+			addRecord("TOOL EQUIPPED", player.Name .. " equipped " .. child.Name)
+		elseif child:IsA("Accessory") then
+			addRecord("ACCESSORY ADDED", player.Name .. " accessory appeared: " .. child.Name)
+		end
+	end))
+
+	table.insert(recordingConnections, character.ChildRemoved:Connect(function(child)
+		if child:IsA("Tool") then
+			addRecord("TOOL UNEQUIPPED", player.Name .. " unequipped " .. child.Name)
+		elseif child:IsA("Accessory") then
+			addRecord("ACCESSORY REMOVED", player.Name .. " accessory removed: " .. child.Name)
+		end
+	end))
+
+	task.spawn(function()
+		while recordMode and selectedPlayer == player and recordingSession == session do
+			task.wait(15)
+
+			if not recordMode or selectedPlayer ~= player or recordingSession ~= session then
+				break
+			end
+
+			local currentCharacter = player.Character
+			local currentHumanoid = currentCharacter and currentCharacter:FindFirstChildOfClass("Humanoid")
+			local root = currentCharacter and currentCharacter:FindFirstChild("HumanoidRootPart")
+
+			if currentHumanoid and root then
+				addRecord("STATUS CHECK", "Health " .. math.floor(currentHumanoid.Health) .. "/" .. math.floor(currentHumanoid.MaxHealth) .. " | Position " .. tostring(root.Position))
+			elseif currentCharacter then
+				addRecord("STATUS CHECK", "Character exists but humanoid or root part is missing")
+			else
+				addRecord("STATUS CHECK", "Character is not loaded")
+			end
+		end
+	end)
+end
+
+local function startRecordingPlayer(player)
+	disconnectRecording()
+
+	recordMode = true
+	recordLog = {}
+	recordingSession += 1
+
+	local session = recordingSession
+
+	addRecord("RECORDING STARTED", "Recording " .. player.Name .. " [" .. player.UserId .. "]")
+
+	table.insert(recordingConnections, player:GetPropertyChangedSignal("Team"):Connect(function()
+		addRecord("TEAM CHANGE", player.Name .. " team changed to " .. (player.Team and player.Team.Name or "None"))
+	end))
+
+	table.insert(recordingConnections, player:GetPropertyChangedSignal("TeamColor"):Connect(function()
+		addRecord("TEAM COLOR CHANGE", player.Name .. " team color changed to " .. player.TeamColor.Name)
+	end))
+
+	table.insert(recordingConnections, player:GetPropertyChangedSignal("Neutral"):Connect(function()
+		addRecord("NEUTRAL CHANGE", player.Name .. " Neutral = " .. boolText(player.Neutral))
+	end))
+
+	table.insert(recordingConnections, player.CharacterAdded:Connect(function(character)
+		addRecord("CHARACTER ADDED", player.Name .. " spawned a new character")
+		setupCharacterRecording(player, character, session)
+	end))
+
+	table.insert(recordingConnections, player.CharacterRemoving:Connect(function(character)
+		addRecord("CHARACTER REMOVING", player.Name .. " character is being removed")
+	end))
+
+	if player.Character then
+		setupCharacterRecording(player, player.Character, session)
+	end
+end
+
+local function stopRecording()
+	disconnectRecording()
+	recordMode = false
+	addRecord("RECORDING STOPPED", "Recording was stopped")
+end
+
+local function destroyGui()
+	if uiGui then
+		uiGui:Destroy()
+		uiGui = nil
+	end
+end
+
+local function makeButton(parent, text, position, size, color)
+	local button = Instance.new("TextButton")
+	button.Size = size
+	button.Position = position
+	button.BackgroundColor3 = color
+	button.BorderSizePixel = 0
+	button.Text = text
+	button.TextColor3 = Color3.fromRGB(255, 255, 255)
+	button.TextScaled = true
+	button.TextWrapped = true
+	button.Font = Enum.Font.GothamBold
+	button.Parent = parent
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 8)
+	corner.Parent = button
+
+	return button
+end
+
+local function showRecordPrompt(player)
+	destroyGui()
+
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "SelectedPlayerRecordPrompt"
+	gui.ResetOnSpawn = false
+	gui.IgnoreGuiInset = true
+	gui.Parent = localPlayer:WaitForChild("PlayerGui")
+	uiGui = gui
+
+	local frame = Instance.new("Frame")
+	frame.Size = UDim2.new(0, 460, 0, 250)
+	frame.Position = UDim2.new(0.5, 0, 0.5, 0)
+	frame.AnchorPoint = Vector2.new(0.5, 0.5)
+	frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+	frame.BorderSizePixel = 0
+	frame.Parent = gui
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 12)
+	corner.Parent = frame
+
+	local title = Instance.new("TextLabel")
+	title.Size = UDim2.new(1, -30, 0, 45)
+	title.Position = UDim2.new(0, 15, 0, 15)
+	title.BackgroundTransparency = 1
+	title.Text = "Record " .. player.Name .. "?"
+	title.TextColor3 = Color3.fromRGB(255, 255, 255)
+	title.TextScaled = true
+	title.TextWrapped = true
+	title.Font = Enum.Font.GothamBold
+	title.Parent = frame
+
+	local message = Instance.new("TextLabel")
+	message.Size = UDim2.new(1, -40, 0, 90)
+	message.Position = UDim2.new(0, 20, 0, 70)
+	message.BackgroundTransparency = 1
+	message.Text = "Recording mode will log when this player dies, leaves, respawns, changes health, changes team, equips tools, and more."
+	message.TextColor3 = Color3.fromRGB(220, 220, 220)
+	message.TextScaled = true
+	message.TextWrapped = true
+	message.Font = Enum.Font.Gotham
+	message.Parent = frame
+
+	local yes = makeButton(frame, "YES", UDim2.new(0, 25, 1, -70), UDim2.new(0, 130, 0, 45), Color3.fromRGB(0, 170, 90))
+	local no = makeButton(frame, "NO", UDim2.new(0.5, -65, 1, -70), UDim2.new(0, 130, 0, 45), Color3.fromRGB(170, 40, 40))
+	local back = makeButton(frame, "BACK", UDim2.new(1, -155, 1, -70), UDim2.new(0, 130, 0, 45), Color3.fromRGB(60, 60, 60))
+
+	yes.MouseButton1Click:Connect(function()
+		startRecordingPlayer(player)
+		destroyGui()
+		safeCall(function()
+			StarterGui:SetCore("SendNotification", {
+				Title = "Record Mode On",
+				Text = "Now recording " .. player.Name,
+				Duration = 5
+			})
+		end)
+	end)
+
+	no.MouseButton1Click:Connect(function()
+		disconnectRecording()
+		recordMode = false
+		recordLog = {}
+		destroyGui()
+		safeCall(function()
+			StarterGui:SetCore("SendNotification", {
+				Title = "Record Mode Off",
+				Text = "Only printed information for " .. player.Name,
+				Duration = 5
+			})
+		end)
+	end)
+
+	back.MouseButton1Click:Connect(function()
+		destroyGui()
+		createPlayerSelector()
+	end)
+end
+
+function createPlayerSelector()
+	destroyGui()
+
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "PlayerSelectorInfoGui"
+	gui.ResetOnSpawn = false
+	gui.IgnoreGuiInset = true
+	gui.Parent = localPlayer:WaitForChild("PlayerGui")
+	uiGui = gui
+
+	local frame = Instance.new("Frame")
+	frame.Size = UDim2.new(0, 520, 0, 430)
+	frame.Position = UDim2.new(0.5, 0, 0.5, 0)
+	frame.AnchorPoint = Vector2.new(0.5, 0.5)
+	frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+	frame.BorderSizePixel = 0
+	frame.Parent = gui
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 12)
+	corner.Parent = frame
+
+	local title = Instance.new("TextLabel")
+	title.Size = UDim2.new(1, -30, 0, 45)
+	title.Position = UDim2.new(0, 15, 0, 15)
+	title.BackgroundTransparency = 1
+	title.Text = "Select a Player"
+	title.TextColor3 = Color3.fromRGB(255, 255, 255)
+	title.TextScaled = true
+	title.Font = Enum.Font.GothamBold
+	title.Parent = frame
+
+	local info = Instance.new("TextLabel")
+	info.Size = UDim2.new(1, -30, 0, 35)
+	info.Position = UDim2.new(0, 15, 0, 60)
+	info.BackgroundTransparency = 1
+	info.Text = "Click a player to print lots of info, then choose recording mode."
+	info.TextColor3 = Color3.fromRGB(220, 220, 220)
+	info.TextScaled = true
+	info.TextWrapped = true
+	info.Font = Enum.Font.Gotham
+	info.Parent = frame
+
+	local scroll = Instance.new("ScrollingFrame")
+	scroll.Size = UDim2.new(1, -40, 1, -150)
+	scroll.Position = UDim2.new(0, 20, 0, 105)
+	scroll.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+	scroll.BorderSizePixel = 0
+	scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+	scroll.ScrollBarThickness = 8
+	scroll.Parent = frame
+
+	local scrollCorner = Instance.new("UICorner")
+	scrollCorner.CornerRadius = UDim.new(0, 8)
+	scrollCorner.Parent = scroll
+
+	local layout = Instance.new("UIListLayout")
+	layout.Padding = UDim.new(0, 8)
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Parent = scroll
+
+	local padding = Instance.new("UIPadding")
+	padding.PaddingTop = UDim.new(0, 10)
+	padding.PaddingLeft = UDim.new(0, 10)
+	padding.PaddingRight = UDim.new(0, 10)
+	padding.PaddingBottom = UDim.new(0, 10)
+	padding.Parent = scroll
+
+	local function refreshList()
+		for _, child in ipairs(scroll:GetChildren()) do
+			if child:IsA("TextButton") then
+				child:Destroy()
+			end
+		end
+
+		for _, player in ipairs(Players:GetPlayers()) do
+			local text = player.Name .. " | " .. player.DisplayName .. " | " .. player.UserId
+			local button = makeButton(scroll, text, UDim2.new(0, 0, 0, 0), UDim2.new(1, -5, 0, 45), Color3.fromRGB(45, 45, 45))
+
+			button.MouseButton1Click:Connect(function()
+				selectedPlayer = player
+				recordMode = false
+				recordLog = {}
+				disconnectRecording()
+				printPlayerInformation(player)
+				showRecordPrompt(player)
+			end)
+		end
+
+		task.wait()
+		scroll.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 25)
+	end
+
+	local refresh = makeButton(frame, "REFRESH", UDim2.new(0, 20, 1, -55), UDim2.new(0, 150, 0, 40), Color3.fromRGB(50, 100, 180))
+	local close = makeButton(frame, "CLOSE", UDim2.new(1, -170, 1, -55), UDim2.new(0, 150, 0, 40), Color3.fromRGB(120, 40, 40))
+
+	refresh.MouseButton1Click:Connect(refreshList)
+	close.MouseButton1Click:Connect(destroyGui)
+
+	refreshList()
+end
+
+Players.PlayerRemoving:Connect(function(player)
+	if selectedPlayer == player then
+		addRecord("PLAYER LEFT GAME", player.Name .. " [" .. player.UserId .. "] left the server")
+		safeCall(function()
+			StarterGui:SetCore("SendNotification", {
+				Title = "Selected Player Left",
+				Text = player.Name .. " left the server.",
+				Duration = 5
+			})
+		end)
+	end
+end)
+
+Players.PlayerAdded:Connect(function(player)
+	if recordMode and selectedPlayer then
+		addRecord("OTHER PLAYER JOINED", player.Name .. " joined while recording " .. selectedPlayer.Name)
+	end
+end)
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed then
+		return
+	end
+
+	if input.KeyCode == Enum.KeyCode.RightShift then
+		printRecordLog()
+	elseif input.KeyCode == Enum.KeyCode.R then
+		if selectedPlayer and selectedPlayer.Parent == Players then
+			printPlayerInformation(selectedPlayer)
+		else
+			print("No selected player to refresh.")
+		end
+	elseif input.KeyCode == Enum.KeyCode.P then
+		createPlayerSelector()
+	end
+end)
+
+task.wait(1)
+
+safeCall(function()
+	StarterGui:SetCore("SendNotification", {
+		Title = "Player Info Script Loaded",
+		Text = "Pick a player. Press P to open selector again.",
+		Duration = 6
+	})
+end)
+
+createPlayerSelector()
