@@ -1,0 +1,477 @@
+local Players = game:GetService("Players")
+local MarketplaceService = game:GetService("MarketplaceService")
+local LocalizationService = game:GetService("LocalizationService")
+local UserService = game:GetService("UserService")
+local GroupService = game:GetService("GroupService")
+local RunService = game:GetService("RunService")
+local Stats = game:GetService("Stats")
+local UserInputService = game:GetService("UserInputService")
+local StarterGui = game:GetService("StarterGui")
+local GuiService = game:GetService("GuiService")
+local TeleportService = game:GetService("TeleportService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Lighting = game:GetService("Lighting")
+local Workspace = game:GetService("Workspace")
+local HttpService = game:GetService("HttpService")
+
+local localPlayer = Players.LocalPlayer
+local recordMode = false
+local recordLog = {}
+local startTime = os.time()
+
+local function safeCall(func)
+	local success, result = pcall(func)
+	if success then
+		return result
+	end
+	return "Unavailable"
+end
+
+local function line(name, value)
+	print(name .. ": " .. tostring(value))
+end
+
+local function divider(title)
+	print("")
+	print("==================================================")
+	print(title)
+	print("==================================================")
+end
+
+local function getTime()
+	return os.date("%Y-%m-%d %H:%M:%S")
+end
+
+local function addRecord(eventName, information)
+	if not recordMode then
+		return
+	end
+
+	local entry = "[" .. getTime() .. "] " .. eventName .. " | " .. information
+	table.insert(recordLog, entry)
+	print("[RECORD MODE] " .. entry)
+end
+
+local function boolText(value)
+	if value == true then
+		return "Yes"
+	elseif value == false then
+		return "No"
+	end
+	return tostring(value)
+end
+
+local function getPing()
+	return safeCall(function()
+		return math.floor(localPlayer:GetNetworkPing() * 1000) .. " ms"
+	end)
+end
+
+local function getMemory()
+	return safeCall(function()
+		return math.floor(Stats:GetTotalMemoryUsageMb()) .. " MB"
+	end)
+end
+
+local function getDeviceType()
+	if UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled then
+		return "Mobile / Tablet"
+	end
+
+	if UserInputService.GamepadEnabled and not UserInputService.KeyboardEnabled then
+		return "Console / Gamepad"
+	end
+
+	if UserInputService.KeyboardEnabled and UserInputService.MouseEnabled then
+		return "PC / Laptop"
+	end
+
+	return "Unknown"
+end
+
+local function getPlayersText()
+	local playerText = {}
+
+	for _, player in ipairs(Players:GetPlayers()) do
+		table.insert(playerText, player.Name .. " (" .. player.DisplayName .. ") [" .. player.UserId .. "]")
+	end
+
+	return table.concat(playerText, ", ")
+end
+
+local function getVerifiedUsers(userIds)
+	local verified = {}
+
+	local result = safeCall(function()
+		return UserService:GetUserInfosByUserIdsAsync(userIds)
+	end)
+
+	if typeof(result) == "table" then
+		for _, info in ipairs(result) do
+			verified[info.Id] = info.HasVerifiedBadge == true
+		end
+	end
+
+	return verified
+end
+
+local function getPlayerUserIds()
+	local ids = {}
+
+	for _, player in ipairs(Players:GetPlayers()) do
+		table.insert(ids, player.UserId)
+	end
+
+	return ids
+end
+
+local function getProductInfo()
+	return safeCall(function()
+		return MarketplaceService:GetProductInfo(game.PlaceId)
+	end)
+end
+
+local function printPlayerInfo()
+	divider("PLAYERS IN SERVER")
+
+	local ids = getPlayerUserIds()
+	local verified = getVerifiedUsers(ids)
+
+	for _, player in ipairs(Players:GetPlayers()) do
+		print("")
+		line("Username", player.Name)
+		line("Display Name", player.DisplayName)
+		line("User ID", player.UserId)
+		line("Verified Badge", boolText(verified[player.UserId]))
+		line("Account Age", player.AccountAge .. " days")
+		line("Membership Type", player.MembershipType.Name)
+		line("Team", player.Team and player.Team.Name or "None")
+		line("Team Color", player.TeamColor.Name)
+		line("Neutral", boolText(player.Neutral))
+		line("Is Local Player", boolText(player == localPlayer))
+		line("Is Friend With Local Player", safeCall(function()
+			return boolText(localPlayer:IsFriendsWith(player.UserId))
+		end))
+
+		local character = player.Character
+
+		if character then
+			local humanoid = character:FindFirstChildOfClass("Humanoid")
+			local root = character:FindFirstChild("HumanoidRootPart")
+
+			line("Character Loaded", "Yes")
+			line("Character Name", character.Name)
+
+			if humanoid then
+				line("Health", math.floor(humanoid.Health) .. " / " .. math.floor(humanoid.MaxHealth))
+				line("WalkSpeed", humanoid.WalkSpeed)
+				line("JumpPower", humanoid.JumpPower)
+				line("Rig Type", humanoid.RigType.Name)
+				line("Sit", boolText(humanoid.Sit))
+				line("Platform Stand", boolText(humanoid.PlatformStand))
+			else
+				line("Humanoid", "Not found")
+			end
+
+			if root then
+				line("Position", tostring(root.Position))
+			else
+				line("HumanoidRootPart", "Not found")
+			end
+		else
+			line("Character Loaded", "No")
+		end
+	end
+end
+
+local function printGameInfo()
+	local productInfo = getProductInfo()
+
+	divider("SERVER INFORMATION")
+
+	line("Local Time Printed", getTime())
+	line("Game Name", game.Name)
+	line("Place ID", game.PlaceId)
+	line("Game ID / Universe ID", game.GameId)
+	line("Job ID", game.JobId)
+	line("Place Version", game.PlaceVersion)
+	line("Creator ID", game.CreatorId)
+	line("Creator Type", game.CreatorType.Name)
+	line("Is Studio", boolText(RunService:IsStudio()))
+	line("Is Client", boolText(RunService:IsClient()))
+	line("Private Server ID", game.PrivateServerId ~= "" and game.PrivateServerId or "None")
+	line("Private Server Owner ID", game.PrivateServerOwnerId ~= 0 and game.PrivateServerOwnerId or "None")
+	line("VIP / Reserved Server", boolText(game.PrivateServerId ~= ""))
+	line("Max Players", Players.MaxPlayers)
+	line("Current Player Count", #Players:GetPlayers())
+	line("Players", getPlayersText())
+
+	divider("LOCAL PLAYER INFORMATION")
+
+	line("Username", localPlayer.Name)
+	line("Display Name", localPlayer.DisplayName)
+	line("User ID", localPlayer.UserId)
+	line("Account Age", localPlayer.AccountAge .. " days")
+	line("Membership Type", localPlayer.MembershipType.Name)
+	line("Ping", getPing())
+	line("Device Type", getDeviceType())
+	line("Keyboard Enabled", boolText(UserInputService.KeyboardEnabled))
+	line("Mouse Enabled", boolText(UserInputService.MouseEnabled))
+	line("Touch Enabled", boolText(UserInputService.TouchEnabled))
+	line("Gamepad Enabled", boolText(UserInputService.GamepadEnabled))
+	line("VR Enabled", boolText(UserInputService.VREnabled))
+	line("Mouse Lock Possible", boolText(localPlayer.DevEnableMouseLock))
+	line("Roblox Locale", safeCall(function()
+		return LocalizationService.RobloxLocaleId
+	end))
+	line("System Locale", safeCall(function()
+		return LocalizationService.SystemLocaleId
+	end))
+
+	divider("CLIENT PERFORMANCE INFORMATION")
+
+	line("Client Memory", getMemory())
+	line("Graphics Quality Level", tostring(settings().Rendering.QualityLevel))
+	line("Fullscreen", boolText(UserInputService.WindowFocused))
+	line("Screen Resolution", tostring(Workspace.CurrentCamera and Workspace.CurrentCamera.ViewportSize or "Unavailable"))
+	line("Gui Inset Top Left", tostring(GuiService:GetGuiInset()))
+
+	divider("WORLD INFORMATION")
+
+	line("Workspace Gravity", Workspace.Gravity)
+	line("Streaming Enabled", boolText(Workspace.StreamingEnabled))
+	line("Filtering Enabled", boolText(Workspace.FilteringEnabled))
+	line("Terrain Exists", boolText(Workspace:FindFirstChildOfClass("Terrain") ~= nil))
+	line("Lighting Time Of Day", Lighting.TimeOfDay)
+	line("Clock Time", Lighting.ClockTime)
+	line("Brightness", Lighting.Brightness)
+	line("Technology", tostring(Lighting.Technology))
+	line("Ambient", tostring(Lighting.Ambient))
+	line("Outdoor Ambient", tostring(Lighting.OutdoorAmbient))
+	line("Fog Start", Lighting.FogStart)
+	line("Fog End", Lighting.FogEnd)
+
+	divider("REPLICATED STORAGE INFORMATION")
+
+	line("ReplicatedStorage Children", #ReplicatedStorage:GetChildren())
+
+	for _, item in ipairs(ReplicatedStorage:GetChildren()) do
+		line("Item", item.ClassName .. " - " .. item.Name)
+	end
+
+	if typeof(productInfo) == "table" then
+		divider("GAME PRODUCT INFORMATION")
+
+		line("Place Name", productInfo.Name or "Unavailable")
+		line("Description", productInfo.Description ~= "" and productInfo.Description or "None")
+		line("Created", productInfo.Created or "Unavailable")
+		line("Updated", productInfo.Updated or "Unavailable")
+		line("Creator Name", productInfo.Creator and productInfo.Creator.Name or "Unavailable")
+		line("Creator ID", productInfo.Creator and productInfo.Creator.Id or "Unavailable")
+		line("Creator Type", productInfo.Creator and productInfo.Creator.CreatorType or "Unavailable")
+		line("Asset Type ID", productInfo.AssetTypeId or "Unavailable")
+		line("Is For Sale", boolText(productInfo.IsForSale))
+		line("Price In Robux", productInfo.PriceInRobux or "Free / Not For Sale")
+		line("Sales", productInfo.Sales or "Unavailable")
+		line("Product ID", productInfo.ProductId or "Unavailable")
+		line("Minimum Membership Level", productInfo.MinimumMembershipLevel or "Unavailable")
+
+		if productInfo.Creator and productInfo.Creator.CreatorType == "User" then
+			divider("CREATOR USER INFORMATION")
+
+			local userInfo = safeCall(function()
+				return UserService:GetUserInfosByUserIdsAsync({productInfo.Creator.Id})
+			end)
+
+			if typeof(userInfo) == "table" and userInfo[1] then
+				line("Creator Username", userInfo[1].Username)
+				line("Creator Display Name", userInfo[1].DisplayName)
+				line("Creator Verified Badge", boolText(userInfo[1].HasVerifiedBadge))
+			else
+				line("Creator User Info", "Unavailable")
+			end
+		end
+
+		if productInfo.Creator and productInfo.Creator.CreatorType == "Group" then
+			divider("CREATOR GROUP INFORMATION")
+
+			local groupInfo = safeCall(function()
+				return GroupService:GetGroupInfoAsync(productInfo.Creator.Id)
+			end)
+
+			if typeof(groupInfo) == "table" then
+				line("Group Name", groupInfo.Name or "Unavailable")
+				line("Group ID", productInfo.Creator.Id)
+				line("Group Description", groupInfo.Description or "Unavailable")
+				line("Group Member Count", groupInfo.MemberCount or "Unavailable")
+				line("Group Public Entry Allowed", boolText(groupInfo.PublicEntryAllowed))
+				line("Group Owner", groupInfo.Owner and groupInfo.Owner.Name or "Unavailable")
+				line("Group Owner ID", groupInfo.Owner and groupInfo.Owner.Id or "Unavailable")
+				line("Group Emblem URL", groupInfo.EmblemUrl or "Unavailable")
+			else
+				line("Group Info", "Unavailable")
+			end
+		end
+	else
+		line("Product Info", "Unavailable")
+	end
+
+	printPlayerInfo()
+
+	divider("RECORD MODE INFORMATION")
+	line("Record Mode Enabled", boolText(recordMode))
+	line("Press RightShift", "Prints the saved record log")
+	line("Script Finished Loading", "Yes")
+	print("")
+end
+
+local function printRecordLog()
+	divider("RECORDED SERVER EVENT LOG")
+
+	if #recordLog == 0 then
+		print("No recorded events yet.")
+	else
+		for number, entry in ipairs(recordLog) do
+			print(number .. ". " .. entry)
+		end
+	end
+end
+
+local function createPrompt()
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "RecordModePrompt"
+	gui.ResetOnSpawn = false
+	gui.IgnoreGuiInset = true
+	gui.Parent = localPlayer:WaitForChild("PlayerGui")
+
+	local frame = Instance.new("Frame")
+	frame.Size = UDim2.new(0, 420, 0, 220)
+	frame.Position = UDim2.new(0.5, 0, 0.5, 0)
+	frame.AnchorPoint = Vector2.new(0.5, 0.5)
+	frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+	frame.BorderSizePixel = 0
+	frame.Parent = gui
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 12)
+	corner.Parent = frame
+
+	local title = Instance.new("TextLabel")
+	title.Size = UDim2.new(1, -30, 0, 45)
+	title.Position = UDim2.new(0, 15, 0, 15)
+	title.BackgroundTransparency = 1
+	title.Text = "Turn Record Mode on?"
+	title.TextColor3 = Color3.fromRGB(255, 255, 255)
+	title.TextScaled = true
+	title.Font = Enum.Font.GothamBold
+	title.Parent = frame
+
+	local message = Instance.new("TextLabel")
+	message.Size = UDim2.new(1, -40, 0, 80)
+	message.Position = UDim2.new(0, 20, 0, 65)
+	message.BackgroundTransparency = 1
+	message.Text = "Record Mode logs players joining, players leaving, player counts, your ping changes, and server events into the Output."
+	message.TextColor3 = Color3.fromRGB(220, 220, 220)
+	message.TextScaled = true
+	message.TextWrapped = true
+	message.Font = Enum.Font.Gotham
+	message.Parent = frame
+
+	local yes = Instance.new("TextButton")
+	yes.Size = UDim2.new(0, 170, 0, 45)
+	yes.Position = UDim2.new(0, 35, 1, -65)
+	yes.BackgroundColor3 = Color3.fromRGB(0, 170, 90)
+	yes.Text = "YES"
+	yes.TextColor3 = Color3.fromRGB(255, 255, 255)
+	yes.TextScaled = true
+	yes.Font = Enum.Font.GothamBold
+	yes.Parent = frame
+
+	local no = Instance.new("TextButton")
+	no.Size = UDim2.new(0, 170, 0, 45)
+	no.Position = UDim2.new(1, -205, 1, -65)
+	no.BackgroundColor3 = Color3.fromRGB(170, 40, 40)
+	no.Text = "NO"
+	no.TextColor3 = Color3.fromRGB(255, 255, 255)
+	no.TextScaled = true
+	no.Font = Enum.Font.GothamBold
+	no.Parent = frame
+
+	local yesCorner = Instance.new("UICorner")
+	yesCorner.CornerRadius = UDim.new(0, 8)
+	yesCorner.Parent = yes
+
+	local noCorner = Instance.new("UICorner")
+	noCorner.CornerRadius = UDim.new(0, 8)
+	noCorner.Parent = no
+
+	yes.MouseButton1Click:Connect(function()
+		recordMode = true
+		addRecord("RECORD MODE ENABLED", "Player chose yes")
+		gui:Destroy()
+		printGameInfo()
+	end)
+
+	no.MouseButton1Click:Connect(function()
+		recordMode = false
+		gui:Destroy()
+		printGameInfo()
+	end)
+end
+
+Players.PlayerAdded:Connect(function(player)
+	local text = player.Name .. " (" .. player.DisplayName .. ") [" .. player.UserId .. "] joined. Player count: " .. #Players:GetPlayers()
+	addRecord("PLAYER JOINED", text)
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+	local text = player.Name .. " (" .. player.DisplayName .. ") [" .. player.UserId .. "] left. Player count before leaving: " .. #Players:GetPlayers()
+	addRecord("PLAYER LEFT", text)
+end)
+
+local lastPing = nil
+
+task.spawn(function()
+	while true do
+		task.wait(10)
+
+		if recordMode then
+			local ping = safeCall(function()
+				return math.floor(localPlayer:GetNetworkPing() * 1000)
+			end)
+
+			if typeof(ping) == "number" then
+				if lastPing == nil then
+					lastPing = ping
+				end
+
+				if math.abs(ping - lastPing) >= 50 then
+					addRecord("PING CHANGE", "Ping changed from " .. lastPing .. " ms to " .. ping .. " ms")
+					lastPing = ping
+				end
+			end
+		end
+	end
+end)
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed then
+		return
+	end
+
+	if input.KeyCode == Enum.KeyCode.RightShift then
+		printRecordLog()
+	end
+end)
+
+task.wait(1)
+
+safeCall(function()
+	StarterGui:SetCore("SendNotification", {
+		Title = "Server Info Loaded",
+		Text = "Open console to see server info.",
+		Duration = 5
+	})
+end)
+
+createPrompt()
