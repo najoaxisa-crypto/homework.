@@ -1,0 +1,58 @@
+local Players = game:GetService("Players")
+
+local loggedPairs = {}
+
+local function getPairKey(a, b)
+	local id1 = math.min(a.UserId, b.UserId)
+	local id2 = math.max(a.UserId, b.UserId)
+	return id1 .. "-" .. id2
+end
+
+local function checkFriendConnection(playerA, playerB)
+	if not playerA or not playerB then return end
+	if playerA == playerB then return end
+
+	local key = getPairKey(playerA, playerB)
+
+	if loggedPairs[key] then return end
+	loggedPairs[key] = true
+
+	local success, areFriends = pcall(function()
+		return playerA:IsFriendsWith(playerB.UserId)
+	end)
+
+	if success then
+		if areFriends then
+			print("[FRIEND CONNECTION] " .. playerA.Name .. " is friends with " .. playerB.Name)
+		else
+			print("[NO CONNECTION] " .. playerA.Name .. " is not friends with " .. playerB.Name)
+		end
+	else
+		warn("[FRIEND CHECK FAILED] " .. playerA.Name .. " and " .. playerB.Name)
+	end
+end
+
+local function scanPlayers()
+	local playerList = Players:GetPlayers()
+
+	for i = 1, #playerList do
+		for j = i + 1, #playerList do
+			checkFriendConnection(playerList[i], playerList[j])
+		end
+	end
+end
+
+Players.PlayerAdded:Connect(function(player)
+	task.wait(1)
+
+	for _, otherPlayer in ipairs(Players:GetPlayers()) do
+		checkFriendConnection(player, otherPlayer)
+	end
+end)
+
+Players.PlayerRemoving:Connect(function(player)
+	print("[PLAYER LEFT] " .. player.Name)
+end)
+
+task.wait(2)
+scanPlayers()
